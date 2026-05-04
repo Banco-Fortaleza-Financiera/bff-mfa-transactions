@@ -1,0 +1,243 @@
+<section class="transactions-page">
+  <header class="transactions-page__header">
+    <div>
+      <p class="transactions-page__eyebrow">Administracion</p>
+      <h1 class="transactions-page__title">Gestion de transacciones</h1>
+    </div>
+    <div class="transactions-page__actions">
+      <button class="button button--secondary" type="button" (click)="openReportModal()">
+        Descargar reporte
+      </button>
+      <button class="transactions-page__refresh" type="button" (click)="loadTransactions()" [disabled]="isLoading()">
+        Actualizar
+      </button>
+    </div>
+  </header>
+
+  @if (errorMessage()) {
+    <p class="transactions-page__alert transactions-page__alert--error">{{ errorMessage() }}</p>
+  }
+
+  @if (successMessage()) {
+    <p class="transactions-page__alert transactions-page__alert--success">{{ successMessage() }}</p>
+  }
+
+  <div class="transactions-page__grid">
+    <form class="transaction-form" [formGroup]="transactionForm" (ngSubmit)="createTransaction()" novalidate>
+      <div class="section-heading">
+        <h2>Crear transaccion</h2>
+      </div>
+
+      <div class="form-grid">
+        <label class="field">
+          <span>Numero de cuenta</span>
+          <input type="text" inputmode="numeric" maxlength="32" formControlName="accountNumber" />
+          @if (hasError(accountNumberControl(), 'required')) {
+            <small>El numero de cuenta es requerido.</small>
+          }
+          @if (hasError(accountNumberControl(), 'pattern')) {
+            <small>El numero de cuenta solo puede contener digitos.</small>
+          }
+        </label>
+
+        <label class="field">
+          <span>Monto</span>
+          <input type="number" min="0.01" step="0.01" formControlName="amount" />
+          @if (hasError(transactionForm.controls.amount, 'required')) {
+            <small>El monto es requerido.</small>
+          }
+          @if (hasError(transactionForm.controls.amount, 'min')) {
+            <small>El monto no debe ser menor o igual que 0.</small>
+          }
+        </label>
+
+        <label class="field">
+          <span>Concepto</span>
+          <select formControlName="concept">
+            @for (concept of concepts; track concept) {
+              <option [value]="concept">{{ concept }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="field field--wide">
+          <span>Descripcion</span>
+          <textarea rows="3" maxlength="255" formControlName="description"></textarea>
+          @if (hasError(transactionForm.controls.description, 'maxlength')) {
+            <small>La descripcion no puede superar 255 caracteres.</small>
+          }
+        </label>
+      </div>
+
+      <button class="button button--primary transaction-form__submit" type="submit" [disabled]="isSaving()">
+        {{ isSaving() ? 'Guardando...' : 'Crear transaccion' }}
+      </button>
+    </form>
+
+    <section class="transactions-list">
+      <form class="filters" [formGroup]="filtersForm" (ngSubmit)="loadTransactions(1)">
+        <label class="field field--search">
+          <span>Buscar</span>
+          <input type="search" formControlName="search" placeholder="Descripcion u otro campo disponible" />
+        </label>
+
+        <label class="field">
+          <span>Numero de cuenta</span>
+          <input type="text" inputmode="numeric" maxlength="32" formControlName="accountNumber" />
+        </label>
+
+        <label class="field">
+          <span>Concepto</span>
+          <select formControlName="concept">
+            <option value="">Todos</option>
+            @for (concept of concepts; track concept) {
+              <option [value]="concept">{{ concept }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Estado</span>
+          <select formControlName="status">
+            <option value="">Todos</option>
+            @for (status of statuses; track status) {
+              <option [value]="status">{{ status }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="field field--small">
+          <span>Registros por pagina</span>
+          <input type="number" min="1" max="100" formControlName="pageSize" />
+        </label>
+
+        <button class="button button--primary" type="submit" [disabled]="isLoading()">Filtrar</button>
+      </form>
+
+      <div class="table-shell">
+        <table>
+          <thead>
+            <tr>
+              <th>Id del usuario</th>
+              <th>Numero de cuenta</th>
+              <th>Monto</th>
+              <th>Descripcion</th>
+              <th>Concepto</th>
+              <th>Status</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (isLoading()) {
+              <tr>
+                <td colspan="7" class="empty-state">Cargando transacciones...</td>
+              </tr>
+            } @else if (!transactions().length) {
+              <tr>
+                <td colspan="7" class="empty-state">No hay transacciones para los filtros actuales.</td>
+              </tr>
+            }
+
+            @for (transaction of transactions(); track transaction.id) {
+              <tr>
+                <td>{{ transaction.id }}</td>
+                <td>{{ accountNumber(transaction) }}</td>
+                <td>
+                  <span [class.amount--debit]="isDebit(transaction)">
+                    {{ formatAmount(transaction) }}
+                  </span>
+                </td>
+                <td>{{ transaction.description || '-' }}</td>
+                <td>{{ transaction.concept }}</td>
+                <td>
+                  <span class="status-pill" [class.status-pill--inactive]="transaction.status === 'INACTIVE'">
+                    {{ transaction.status }}
+                  </span>
+                </td>
+                <td class="table-actions">
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    (click)="toggleStatus(transaction)"
+                    [disabled]="transaction.status === 'INACTIVE' || isLoading()"
+                  >
+                    Inactivar
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <footer class="pagination">
+        <span>{{ page().totalCount }} registros</span>
+        <div>
+          <button class="button button--ghost" type="button" (click)="previousPage()" [disabled]="page().page <= 1 || isLoading()">
+            Anterior
+          </button>
+          <span>Pagina {{ page().page }} de {{ page().totalPages }}</span>
+          <button class="button button--ghost" type="button" (click)="nextPage()" [disabled]="!canGoNextPage() || isLoading()">
+            Siguiente
+          </button>
+        </div>
+      </footer>
+    </section>
+  </div>
+
+  @if (isReportModalOpen()) {
+    <div class="modal-backdrop" role="presentation" (click)="closeReportModal()">
+      <section class="report-modal" role="dialog" aria-modal="true" aria-labelledby="report-modal-title" (click)="$event.stopPropagation()">
+        <header class="report-modal__header">
+          <div>
+            <p class="transactions-page__eyebrow">Reporte PDF</p>
+            <h2 id="report-modal-title">Estado de cuenta</h2>
+          </div>
+          <button class="report-modal__close" type="button" (click)="closeReportModal()" [disabled]="isDownloadingReport()">
+            Cerrar
+          </button>
+        </header>
+
+        <form [formGroup]="reportForm" (ngSubmit)="downloadAccountStatementReport()" novalidate>
+          <div class="form-grid">
+            <label class="field field--wide">
+              <span>Id del usuario</span>
+              <input type="string" min="1" formControlName="idUser" />
+              @if (hasError(reportIdUserControl(), 'required')) {
+                <small>El usuario es requerido.</small>
+              }
+              @if (hasError(reportIdUserControl(), 'min')) {
+                <small>El usuario debe ser mayor a cero.</small>
+              }
+            </label>
+
+            <label class="field">
+              <span>Fecha inicial</span>
+              <input type="date" formControlName="startDate" />
+              @if (hasError(reportStartDateControl(), 'required')) {
+                <small>La fecha inicial es requerida.</small>
+              }
+            </label>
+
+            <label class="field">
+              <span>Fecha final</span>
+              <input type="date" formControlName="endDate" />
+              @if (hasError(reportEndDateControl(), 'required')) {
+                <small>La fecha final es requerida.</small>
+              }
+            </label>
+          </div>
+
+          <footer class="report-modal__actions">
+            <button class="button button--ghost" type="button" (click)="closeReportModal()" [disabled]="isDownloadingReport()">
+              Cancelar
+            </button>
+            <button class="button button--primary" type="submit" [disabled]="isDownloadingReport()">
+              {{ isDownloadingReport() ? 'Descargando...' : 'Descargar PDF' }}
+            </button>
+          </footer>
+        </form>
+      </section>
+    </div>
+  }
+</section>
